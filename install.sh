@@ -56,7 +56,7 @@ dl gau       lc/gau                     "linux_${ARCH}.tar.gz"
 echo "==> [4/6] python venv + 依赖"
 python3 -m venv .venv
 .venv/bin/pip install -q --upgrade pip
-.venv/bin/pip install -q openai pydantic pyyaml tldextract
+.venv/bin/pip install -q openai pydantic pyyaml tldextract "httpx[socks]"
 chmod +x plugins/*/*.py 2>/dev/null || true
 
 echo "==> [5/6] 配置两个 key"
