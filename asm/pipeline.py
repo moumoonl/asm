@@ -64,8 +64,11 @@ class Runner:
         st = self.state
         round_no = st.next_round()
         K = int(self.cfg["revalidate"]["every_rounds"])
-        do_reval = (round_no % K == 0) and not self.dry
-        self.log(f"=== run 开始 round={round_no} dry={self.dry} 复探本轮={'是' if do_reval else '否'} ===")
+        do_reval = (round_no % K == 0) and not self.dry  # naabu 复扫节奏(每 K 轮)
+        # httpx 变更检测非侵入(GET 探活),默认每轮跑;naabu/深扫仍按 K 轮/条件触发
+        httpx_reval = bool(self.cfg["revalidate"].get("httpx_every_round", True)) and not self.dry
+        self.log(f"=== run 开始 round={round_no} dry={self.dry} "
+                 f"httpx复探={'每轮' if httpx_reval else f'每{K}轮'} naabu复扫={'是' if do_reval else '否'} ===")
 
         # ---- 1 INGEST ----
         res, deriv = ingest_lines(targets, self.cfg, self.root)
@@ -195,11 +198,11 @@ class Runner:
                 parked_new += 1
         self.log(f"[enrich] httpx:活 {len(live_new)} 死 {parked_new}(parked 不通知)")
 
-        # ---- 复探(每 K 轮):已见端点变化检测 ----
+        # ---- 复探:httpx 每轮轻探 seen 端点测变更(非侵入);naabu 复扫仍每 K 轮 ----
         changed: list[Asset] = []
         takedown: list[Asset] = []
         revived: list[Asset] = []
-        if do_reval:
+        if httpx_reval:
             changed, takedown, revived = self._revalidate(round_no)
             self.log(f"[revalidate] 变更 {len(changed)} 下架 {len(takedown)} 复活 {len(revived)}")
 

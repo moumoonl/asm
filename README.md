@@ -47,7 +47,7 @@ targets.txt / asm run -t <目标>
 7 NOTIFY    钉钉(webhook 空 -> stdout 兜底);写 seen/seeds
 ```
 
-**持续监控**:每轮跑一遍。已见端点每 K 轮(默认 4)轻探 `change_sig`(status+title+tech),发现变化先过**确认门**(再探 2 次,≥2/3 一致才确认,5xx/429/超时算抖动),确认后:
+**持续监控**:每轮跑一遍。**httpx 每轮轻探**所有已见端点的 `change_sig`(status+title+tech,非侵入 GET 探活),发现变化先过**确认门**(再探 2 次,≥2/3 一致才确认,5xx/429/超时算抖动),确认后:
 - **变更** → 重进富化/深扫管道 → 通知
 - **下架**(连续确认不可访问)→ 标记 parked → 通知;之后复活再通知
 - 事件冷却 2 轮防抖;种子每 K 轮 naabu 复扫
@@ -184,7 +184,8 @@ asm reload                      # 改 schedule.yaml 后的 timer 重载说明
 | `enrichers.ffuf_dirs` | **关** | 预留,字典自定后开 |
 | `routing.scope_roots` | 空 | 范围白名单:只扩展这些根域 |
 | `waf.deep_scan_representative_only` | true | 折叠组只深扫代表(省量防抖) |
-| `revalidate.every_rounds` | 4 | 每 K 轮轻探 change_sig;timer 6h × K=4 ≈ 每天 |
+| `revalidate.httpx_every_round` | true | httpx 变更检测每轮跑(非侵入);false 则仅每 K 轮 |
+| `revalidate.every_rounds` | 4 | naabu 端口复扫每 K 轮;timer 6h × K=4 ≈ 每天 |
 | `revalidate.confirmation_retries` | 2 | 确认门:再探次数,≥2/3 一致才确认 |
 | `revalidate.cooldown_rounds` | 2 | 事件冷却防抖 |
 | `state.retention_days` | 90 | 清理 90 天未见的死端点/旧 finding |

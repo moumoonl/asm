@@ -46,6 +46,7 @@ waf:
 
 revalidate:
   every_rounds: 4
+  httpx_every_round: true       # httpx 变更检测每轮跑(非侵入);false 则仅每 K 轮
   change_sig: "status+title+tech"
   confirmation_retries: 2
   cooldown_rounds: 2
