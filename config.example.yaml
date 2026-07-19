@@ -59,3 +59,7 @@ state:
 limits:
   collector_timeout: 300
   max_assets_per_run: 5000
+
+output:                          # 每轮每工具详情落盘(默认开启)
+  enabled: true                  # false 则不产 OUTPUT/
+  dir: "OUTPUT"                  # 输出根目录(相对项目根;每轮一个 round_NNN_<ts>/ 子目录)

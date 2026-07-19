@@ -61,8 +61,90 @@ class Runner:
 
     # ---------------- 主流程 ----------------
     def run(self, targets: list[str]) -> dict:
+        """薄包装:建 OUTPUT 目录 -> 跑主流程 -> 渲染汇总(异常也渲染部分汇总)。"""
+        round_no = self.state.next_round()
+        self._init_output(round_no, targets)
+        report = None
+        try:
+            report = self._run_impl(targets, round_no)
+            return report
+        finally:
+            self._finalize_output(report)
+
+    def _init_output(self, round_no: int, targets: list[str]) -> None:
+        """建 OUTPUT/round_NNN_<ts>/ 并设 ASM_OUTPUT_DIR(默认开启;config.output.enabled 可关)。"""
+        out = self.cfg.get("output", {}) or {}
+        if not out.get("enabled", True):
+            self.output_dir = ""
+            os.environ.pop("ASM_OUTPUT_DIR", None)
+            return
+        ts = time.strftime("%Y%m%d-%H%M%S")
+        d = os.path.join(self.root, out.get("dir", "OUTPUT"),
+                         f"round_{round_no:03d}_{ts}")
+        os.makedirs(d, exist_ok=True)
+        self.output_dir = d
+        os.environ["ASM_OUTPUT_DIR"] = d
+        self._cur = {"round": round_no, "dry": self.dry, "targets": targets, "ts": ts}
+        self.log(f"[output] 本轮详情落盘 -> {d}")
+
+    def _finalize_output(self, report: dict | None) -> None:
+        """渲染 _summary.md + 清环境变量(异常时 report=None 也渲染部分汇总)。"""
+        os.environ.pop("ASM_OUTPUT_DIR", None)
+        d = getattr(self, "output_dir", "")
+        if not d or not os.path.isdir(d):
+            return
+        try:
+            self._render_summary(d, report)
+        except Exception as e:
+            self.log(f"[output] 汇总渲染失败: {e}")
+
+    def _render_summary(self, d: str, report: dict | None) -> None:
+        agg: dict[str, dict] = {}
+        tally = os.path.join(d, "_tally.jsonl")
+        if os.path.exists(tally):
+            with open(tally, "r", encoding="utf-8") as f:
+                for line in f:
+                    try:
+                        r = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    key = f"{r['phase']}/{r['name']}"
+                    a = agg.setdefault(key, {"calls": 0, "in": 0, "out": 0, "kind": "-"})
+                    a["calls"] += 1
+                    a["in"] += int(r.get("input", 0))
+                    a["out"] += int(r.get("output", 0))
+                    if r.get("kind") and r["kind"] != "-":
+                        a["kind"] = r["kind"]
+        cur = getattr(self, "_cur", {})
+        tgts = ", ".join(cur.get("targets", [])) or "(无)"
+        lines = [
+            f"# Round {cur.get('round', '?')}  {cur.get('ts', '')}  (dry={cur.get('dry', False)})",
+            f"目标: {tgts}",
+            "",
+            "## 各工具产出",
+            "| 工具 | 调用次数 | 输入合计 | 产出合计 | 类型 |",
+            "| --- | ---: | ---: | ---: | --- |",
+        ]
+        order = {"collectors": 0, "enrichers": 1, "notifiers": 2}
+        for key in sorted(agg, key=lambda k: (order.get(k.split("/")[0], 9), k)):
+            a = agg[key]
+            lines.append(f"| {key} | {a['calls']} | {a['in']} | {a['out']} | {a['kind']} |")
+        if not agg:
+            lines.append("| (本轮无工具调用) | | | | |")
+        if report:
+            c = report.get("counts", {})
+            lines += ["", "## 轮次结果",
+                      f"新增 {c.get('new', 0)} / 变更 {c.get('changed', 0)} / "
+                      f"下架 {c.get('takedown', 0)} / 复活 {c.get('revived', 0)} / "
+                      f"finding {c.get('findings', 0)}"]
+        else:
+            lines += ["", "## 轮次结果",
+                      "(本轮异常退出,无结果汇总;各工具详情见同目录 .txt)"]
+        with open(os.path.join(d, "_summary.md"), "w", encoding="utf-8") as f:
+            f.write("\n".join(lines) + "\n")
+
+    def _run_impl(self, targets: list[str], round_no: int) -> dict:
         st = self.state
-        round_no = st.next_round()
         K = int(self.cfg["revalidate"]["every_rounds"])
         do_reval = (round_no % K == 0) and not self.dry  # naabu 复扫节奏(每 K 轮)
         # httpx 变更检测非侵入(GET 探活),默认每轮跑;naabu/深扫仍按 K 轮/条件触发

@@ -6,6 +6,7 @@ state.db.*
 *.db
 *.db.lock
 logs/
+OUTPUT/
 
 # --- Python ---
 .venv/

@@ -81,7 +81,7 @@ bash install.sh
 curl -fsSL https://raw.githubusercontent.com/moumoonl/asm/main/install.sh | bash
 ```
 
-`install.sh` 做 6 件事:`apt` 依赖 → clone 到 `~/asm` → 下载预编译工具(subfinder/httpx/naabu/nuclei/katana/gau)到 `bin/` → 建 python venv → 填 key → 注册 systemd timer(按 `schedule.yaml`,默认每 6 小时)→ 创建 `asm` 命令。
+`install.sh` 做 6 件事:`apt` 依赖 → clone 到 `~/asm` → 下载预编译工具(subfinder/httpx/naabu/nuclei/katana/gau)到 `bin/` → **校验 nuclei 模板**(必须就绪,否则中止安装)→ 建 python venv → 填 key → 注册 systemd timer(按 `schedule.yaml`,默认每 6 小时)→ 创建 `asm` 命令。
 
 ### 3. 填两个 key
 
@@ -124,7 +124,7 @@ systemctl list-timers asm.timer    # 确认定时已注册
 
 ---
 
-**macOS 本地跑(开发/测试)**:`brew install subfinder httpx naabu nuclei katana gau` + `python3 -m venv .venv && .venv/bin/pip install openai pydantic pyyaml tldextract`,然后 `.venv/bin/python -m asm ...`。长任务建议 `caffeinate -i asm run` 防合盖休眠拖慢深扫。
+**macOS 本地跑(开发/测试)**:`brew install subfinder httpx naabu nuclei katana gau` + `python3 -m venv .venv && .venv/bin/pip install openai pydantic pyyaml tldextract "httpx[socks]"`,然后 `.venv/bin/python -m asm ...`。长任务建议 `caffeinate -i asm run` 防合盖休眠拖慢深扫。
 
 ## 快速开始
 
@@ -179,7 +179,7 @@ asm reload                      # 改 schedule.yaml 后的 timer 重载说明
 | `collectors.*` | 全开 | gau / subfinder,只对根域跑 |
 | `enrichers.naabu.ports` | top-1000 | connect 扫描免 root;`only_user_input` 只扫用户种子 |
 | `enrichers.httpx.rate/timeout` | 50 / 10s | 探活+富化一体 |
-| `enrichers.js_secrets.max_js` | 200 | 每端点抓 JS 上限 |
+| `enrichers.js_secrets.max_js` | 60 | 每端点抓 JS 上限 |
 | `enrichers.nuclei` | `-as`, medium+ | 仅 http 模板,只跑折叠组代表 |
 | `enrichers.ffuf_dirs` | **关** | 预留,字典自定后开 |
 | `routing.scope_roots` | 空 | 范围白名单:只扩展这些根域 |
@@ -190,8 +190,29 @@ asm reload                      # 改 schedule.yaml 后的 timer 重载说明
 | `revalidate.cooldown_rounds` | 2 | 事件冷却防抖 |
 | `state.retention_days` | 90 | 清理 90 天未见的死端点/旧 finding |
 | `limits.max_assets_per_run` | 5000 | 单轮新端点截断(user 优先) |
+| `output.enabled` / `output.dir` | 开 / `OUTPUT` | 每轮每工具详情落盘;`enabled: false` 关闭 |
 
 插件配置通过 `ASM_PLUGIN_CONFIG` 环境变量(JSON)注入插件,**加配置项只改 yaml,不动框架代码**。
+
+### 轮次详情(OUTPUT 目录)
+
+每次 `asm run` 会在 `OUTPUT/round_NNN_<时间戳>/` 下落盘本轮**每个工具**的详细记录,方便逐轮复盘每个工具跑了什么、产出什么:
+
+```
+OUTPUT/round_003_20260719-221800/
+  collectors_crtsh.txt      # 每次调用一段:输入摘要 + 原始 JSONL 输出 + stderr
+  collectors_gau.txt
+  collectors_subfinder.txt
+  enrichers_naabu.txt
+  enrichers_httpx.txt       # 含每轮复探的确认门投票探活
+  enrichers_js_secrets.txt
+  enrichers_nuclei.txt
+  _summary.md               # 各工具调用次数/输入/产出汇总表 + 轮次结果
+```
+
+- 单工具 `.txt` 内每次调用一段:输入端点列表(关键 attrs)、插件原始 JSONL 输出(超 200 行截断)、stderr 尾部。
+- `_summary.md` 汇总各工具调用次数/输入合计/产出合计,以及本轮新增/变更/下架/复活/finding 计数。
+- `OUTPUT/` 已被 `.gitignore` 忽略,不会进版本库。
 
 ## 通知样例
 
@@ -233,7 +254,7 @@ phase: enricher            # collector | enricher | notifier
 input: endpoint            # root=根域 | seed=主机种子 | endpoint=存活端点
 accepts: [ip:port, domain:port, url]
 emits: [asset, finding]
-order: 45                  # naabu=10 httpx=20 fold=30 js_secrets=40 nuclei=50
+order: 45                  # naabu=10 httpx=20 js_secrets=40 nuclei=50(折叠由框架内部做,非插件)
 timeout: 300
 enabled: true
 ```
@@ -301,7 +322,7 @@ asm/
 ├── targets.txt             # 目标,一行一条
 ├── asm/                    # 框架(python 包)
 │   ├── cli.py              # CLI 入口
-│   ├── pipeline.py         # 7 步流水线编排 + 复探确认门
+│   ├── pipeline.py         # 7 步流水线编排 + 复探确认门 + OUTPUT 落盘
 │   ├── ingest.py           # 输入两段清洗 + 派生
 │   ├── plugins.py          # 插件发现/manifest/运行/lint
 │   ├── llm.py              # 两触点:输入兜底 + 结果归类
@@ -317,9 +338,10 @@ asm/
 ├── data/                   # waf_ranges.yaml / shared_suffix.yaml
 ├── bin/                    # 预编译工具(install.sh 下载)
 ├── logs/                   # run.log / rejected / llm_failures
+├── OUTPUT/                 # 每轮每工具详情(.gitignore 忽略)
 └── state.db                # sqlite(可删,删了全量重推)
 ```
 
 ---
 
-**已验证**:v4.3 设计 + P1 实现于 2026-07-18 完成端到端实测(INGEST 六形态单测、死主机路径、本地靶场全生命周期:新增→去重→变更→下架→复活,折叠/确认门/finding 去重均通过),记录见设计文档 §18。
+**已验证**:v4.3 设计 + P1 实现于 2026-07-19 完成真 DeepSeek + 19 真目标复测(INGEST 六形态单测、死主机路径、本地靶场全生命周期:新增→去重→变更→下架→复活,折叠/确认门/finding 去重均通过),记录见设计文档 §18。

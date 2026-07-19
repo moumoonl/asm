@@ -51,7 +51,36 @@ dl naabu     projectdiscovery/naabu     "linux_${ARCH}.zip"
 dl nuclei    projectdiscovery/nuclei    "linux_${ARCH}.zip"
 dl katana    projectdiscovery/katana    "linux_${ARCH}.zip"
 dl gau       lc/gau                     "linux_${ARCH}.tar.gz"
-"$BIN_DIR/nuclei" -update-templates >/dev/null 2>&1 || true
+
+# nuclei 模板:必须就绪,否则 nuclei 扫 0 结果(确认装好再往下)
+echo "==> [3.5/6] nuclei 模板校验"
+nuke="$BIN_DIR/nuclei"
+tdir="${NUCLEI_TEMPLATES_PATH:-$HOME/nuclei-templates}"
+templates_ready() {
+  [ -d "$tdir" ] && [ -n "$(find "$tdir" -name '*.yaml' 2>/dev/null | head -1)" ]
+}
+if templates_ready; then
+  cnt="$(find "$tdir" -name '*.yaml' | wc -l | tr -d ' ')"
+  echo "  ✅ nuclei 模板已就绪: $tdir ($cnt 个 yaml),跳过下载"
+else
+  echo "  模板缺失,开始下载(国内需先 export HTTPS_PROXY=http://宿主IP:7890)..."
+  for i in 1 2 3; do
+    "$nuke" -update-templates 2>&1 | tail -2
+    templates_ready && break
+    echo "  第 $i 次仍未就绪,重试..."
+    sleep 3
+  done
+fi
+if ! templates_ready; then
+  echo "  ❌ nuclei 模板仍未就绪 -> nuclei 将扫出 0 结果,中止安装。"
+  echo "     排查:1) 网络/代理是否可达 GitHub  2) 手动补装:"
+  echo "        export HTTPS_PROXY=http://宿主IP:7890"
+  echo "        \"$nuke\" -update-templates"
+  echo "     装好后重新 bash install.sh"
+  exit 1
+fi
+cnt="$(find "$tdir" -name '*.yaml' | wc -l | tr -d ' ')"
+echo "  ✅ nuclei 模板就绪: $tdir ($cnt 个 yaml)"
 
 echo "==> [4/6] python venv + 依赖"
 python3 -m venv .venv

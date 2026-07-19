@@ -9,6 +9,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 
 import yaml
 
@@ -77,6 +78,86 @@ def is_enabled(cfg: dict, plugin: Plugin) -> bool:
     return bool(cfg_for(cfg, plugin).get("enabled", True))
 
 
+def _record(plugin: Plugin, stdin_lines: list[str], stdout_raw: str, stderr: str,
+            objs: list[dict], err: str, passthrough: bool) -> None:
+    """落盘单次工具调用详情到 OUTPUT/<phase>_<name>.txt + _tally.jsonl。
+
+    开关:环境变量 ASM_OUTPUT_DIR(仅 asm run 时由 pipeline 设置)。passthrough(通知器)不落盘。
+    落盘失败绝不影响主流程(只 warn)。
+    """
+    if passthrough:
+        return
+    out_dir = os.environ.get("ASM_OUTPUT_DIR")
+    if not out_dir:
+        return
+    try:
+        os.makedirs(out_dir, exist_ok=True)
+        ts = time.strftime("%H:%M:%S")
+        # 输入摘要(value + 关键 attrs,前 50 个)
+        in_lines: list[str] = []
+        for ln in stdin_lines[:50]:
+            try:
+                o = json.loads(ln)
+            except (json.JSONDecodeError, ValueError):
+                in_lines.append(f"  - {ln[:120]}")
+                continue
+            val = o.get("value", "")
+            attrs = o.get("attrs") or {}
+            tag = ""
+            if attrs.get("scheme"):
+                tag += f"  [scheme={attrs['scheme']}]"
+            if attrs.get("paths"):
+                tag += f"  [paths={attrs['paths'][:3]}]"
+            in_lines.append(f"  - {val}{tag}")
+        if len(stdin_lines) > 50:
+            in_lines.append(f"  ... +{len(stdin_lines) - 50} 个已省略")
+        # 输出(插件 JSONL);超 200 行截断
+        out_lines = (stdout_raw or "").splitlines()
+        if objs and objs[0].get("kind") == "asset":
+            out_kind = "asset"
+        elif objs and objs[0].get("kind") == "finding":
+            out_kind = "finding"
+        else:
+            out_kind = "-"
+        shown = out_lines[:200]
+        out_block = "\n".join(f"  {l}" for l in shown)
+        if len(out_lines) > 200:
+            out_block += f"\n  ... +{len(out_lines) - 200} 行已省略"
+        stderr_tail = (stderr or "")[-500:].strip()
+        # 调用序号:该工具在本轮的第几次调用(从 tally 已有同名行数推断,单线程无竞争)
+        tally_path = os.path.join(out_dir, "_tally.jsonl")
+        seq = 1
+        if os.path.exists(tally_path):
+            with open(tally_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    try:
+                        r = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if r.get("phase") == plugin.phase and r.get("name") == plugin.name:
+                        seq += 1
+        sect = [
+            f"===== {plugin.phase}/{plugin.name} · 调用#{seq}  {ts} =====",
+            f"输入: {len(stdin_lines)} 个",
+            *in_lines,
+            f"插件输出 ({len(out_lines)} 行 JSONL -> {len(objs)} {out_kind})"
+            + (f"  [err: {err}]" if err else "") + ":",
+            out_block if out_block else "  (无输出)",
+            f"stderr: {stderr_tail if stderr_tail else '(空)'}",
+            "-" * 60,
+        ]
+        with open(os.path.join(out_dir, f"{plugin.phase}_{plugin.name}.txt"), "a",
+                  encoding="utf-8") as f:
+            f.write("\n".join(sect) + "\n")
+        with open(tally_path, "a", encoding="utf-8") as f:
+            f.write(json.dumps({"phase": plugin.phase, "name": plugin.name, "ts": ts,
+                                "input": len(stdin_lines), "output": len(objs),
+                                "kind": out_kind, "err": err[:200]},
+                               ensure_ascii=False) + "\n")
+    except Exception as e:  # 落盘失败绝不影响主流程
+        sys.stderr.write(f"[record] 落盘失败({plugin.name}): {e}\n")
+
+
 def run_plugin(root: str, cfg: dict, plugin: Plugin, stdin_lines: list[str],
                timeout: int | None = None, passthrough: bool = False) -> tuple[list[dict], str]:
     """运行插件:喂 JSONL,收 stdout JSONL。崩溃/超时隔离,返回 (解析结果, stderr)。
@@ -102,12 +183,21 @@ def run_plugin(root: str, cfg: dict, plugin: Plugin, stdin_lines: list[str],
         note = f"[plugin:{plugin.name}] 超时({timeout or plugin.timeout}s)"
         if partial:
             note += f",回收部分输出 {len(partial)} 行"
+        _record(plugin, stdin_lines, e.stdout or "", e.stderr or "", partial, note, passthrough)
         return partial, note
     except OSError as e:
-        return [], f"[plugin:{plugin.name}] 启动失败: {e}"
+        note = f"[plugin:{plugin.name}] 启动失败: {e}"
+        _record(plugin, stdin_lines, "", "", [], note, passthrough)
+        return [], note
     if p.returncode != 0:
-        return [], f"[plugin:{plugin.name}] 退出码 {p.returncode}: {p.stderr[-500:]}"
-    return parse_jsonl(p.stdout or ""), p.stderr
+        note = f"[plugin:{plugin.name}] 退出码 {p.returncode}: {p.stderr[-500:]}"
+        # 非零退出仍落盘已产出的部分输出(诊断用),但按原语义不返回给流水线
+        partial = parse_jsonl(p.stdout or "") if not passthrough else []
+        _record(plugin, stdin_lines, p.stdout or "", p.stderr or "", partial, note, passthrough)
+        return [], note
+    objs = parse_jsonl(p.stdout or "") if not passthrough else []
+    _record(plugin, stdin_lines, p.stdout or "", p.stderr or "", objs, "", passthrough)
+    return objs, p.stderr
 
 
 def lint_plugin(root: str, cfg: dict, path: str) -> tuple[bool, str]:
