@@ -175,7 +175,8 @@ asm reload                      # 改 schedule.yaml 后的 timer 重载说明
 |---|---|---|
 | `llm.api_key` / `base_url` / `model` | DeepSeek | 留空 = 规则直通模式 |
 | `push.webhook` / `secret` / `channel` | 空 / dingtalk | 空 -> stdout 兜底;`channel: none` 完全关闭 |
-| `collectors.*` | 全开 | crtsh / gau / subfinder,只对根域跑 |
+| `collectors.crtsh` | 开 | CT 证书子域;`retries`(默认3)/`timeout`(25s)/`backoff`(2s) 重试退避,crt.sh 502 抽风时稳化 |
+| `collectors.*` | 全开 | gau / subfinder,只对根域跑 |
 | `enrichers.naabu.ports` | top-1000 | connect 扫描免 root;`only_user_input` 只扫用户种子 |
 | `enrichers.httpx.rate/timeout` | 50 / 10s | 探活+富化一体 |
 | `enrichers.js_secrets.max_js` | 200 | 每端点抓 JS 上限 |
