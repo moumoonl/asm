@@ -29,7 +29,7 @@ cd "$INSTALL_DIR"
 echo "==> [3/6] 下载预编译工具到 bin/"
 mkdir -p "$BIN_DIR"
 ARCH=$(uname -m); [ "$ARCH" = "x86_64" ] && ARCH="amd64" || ARCH="arm64"
-dl() {  # dl <name> <github_repo> <asset_pattern>
+dl() {  # dl <name> <github_repo> <asset_pattern>  支持 .zip 与 .tar.gz
   local name="$1" repo="$2" pat="$3"
   if [ -x "$BIN_DIR/$name" ]; then echo "  $name 已存在,跳过"; return; fi
   local url
@@ -37,17 +37,20 @@ dl() {  # dl <name> <github_repo> <asset_pattern>
         | jq -r ".assets[] | select(.name | test(\"$pat\")) | .browser_download_url" | head -1)
   if [ -z "$url" ] || [ "$url" = "null" ]; then echo "  !! $name 下载地址解析失败,请手动装"; return; fi
   echo "  下载 $name"
-  curl -fsSL "$url" -o "/tmp/$name.zip" 2>/dev/null || curl -fsSL "$url" -o "/tmp/$name.zip"
-  unzip -o -q "/tmp/$name.zip" -d "/tmp/${name}_x"
+  local ext="zip"; case "$url" in *.tar.gz|*.tgz) ext="tar.gz";; esac
+  curl -fsSL "$url" -o "/tmp/$name.$ext"
+  rm -rf "/tmp/${name}_x"; mkdir -p "/tmp/${name}_x"
+  if [ "$ext" = "tar.gz" ]; then tar -xzf "/tmp/$name.$ext" -C "/tmp/${name}_x"
+  else unzip -o -q "/tmp/$name.$ext" -d "/tmp/${name}_x"; fi
   find "/tmp/${name}_x" -name "$name" -type f -exec cp {} "$BIN_DIR/$name" \; -quit
-  chmod +x "$BIN_DIR/$name"; rm -rf "/tmp/$name.zip" "/tmp/${name}_x"
+  chmod +x "$BIN_DIR/$name"; rm -rf "/tmp/$name.$ext" "/tmp/${name}_x"
 }
 dl subfinder projectdiscovery/subfinder "linux_${ARCH}.zip"
 dl httpx     projectdiscovery/httpx     "linux_${ARCH}.zip"
 dl naabu     projectdiscovery/naabu     "linux_${ARCH}.zip"
 dl nuclei    projectdiscovery/nuclei    "linux_${ARCH}.zip"
 dl katana    projectdiscovery/katana    "linux_${ARCH}.zip"
-dl gau       lc/gau                     "linux_${ARCH}.zip"
+dl gau       lc/gau                     "linux_${ARCH}.tar.gz"
 "$BIN_DIR/nuclei" -update-templates >/dev/null 2>&1 || true
 
 echo "==> [4/6] python venv + 依赖"
@@ -80,10 +83,16 @@ WorkingDirectory=$INSTALL_DIR
 ExecStart=$INSTALL_DIR/.venv/bin/python -m asm run
 Environment=HTTPS_PROXY=${HTTPS_PROXY:-}
 EOF
-CRON=$(grep -E '^run:' schedule.yaml | sed -E 's/run:\s*"([^"]+)"/\1/')
-# cron -> systemd OnCalendar(简单转换:分 时 日 月 周)
+CRON=$(grep -E '^run:' schedule.yaml | sed -E 's/run:[[:space:]]*"([^"]+)"/\1/')
+# cron -> systemd OnCalendar(分 时 日 月 周)。注意:systemd 不认 cron 的 */N,需转 0/N
 read -r MI HH DM MO DW <<<"$CRON"
+case "$HH" in */[0-9]*) HH="0/${HH#*/}";; esac   # */6 -> 0/6 ; 纯 * / 列表保持
 ONCAL="*-${MO:-*}-${DM:-*} ${HH:-*}:${MI:-0}:00"
+# 校验 OnCalendar 合法,非法则退化为每小时(保底能跑)
+if ! systemd-analyze calendar "$ONCAL" >/dev/null 2>&1; then
+  echo "  !! OnCalendar=$ONCAL 非法,退化为 *-*-* *:0:00(每小时)"
+  ONCAL="*-*-* *:0:00"
+fi
 sudo tee /etc/systemd/system/asm.timer >/dev/null <<EOF
 [Unit]
 Description=asm timer
