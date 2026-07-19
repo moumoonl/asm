@@ -14,7 +14,7 @@
 ## 目录
 
 - [工作原理](#工作原理)
-- [安装(Ubuntu 一键)](#安装ubuntu-一键)
+- [快速安装部署(Ubuntu)](#快速安装部署ubuntu)
 - [快速开始](#快速开始)
 - [输入格式(6 种形态)](#输入格式6-种形态)
 - [CLI 命令](#cli-命令)
@@ -56,29 +56,75 @@ targets.txt / asm run -t <目标>
 - 触点 A:代码判不出的输入残渣 → 极窄 schema 救回
 - 触点 B:富化+折叠后的增量 → 分类分级(泄露/登录页/高价值/噪声...)
 
-## 安装(Ubuntu 一键)
+## 快速安装部署(Ubuntu)
+
+干净 **Ubuntu 22.04 / 24.04**,4 步上线。只需两个 key:LLM API key(建议)+ 钉钉 webhook(可选)。
+
+### 1. 准备代理(国内必填,海外可跳过)
+
+`github.com` / `api.github.com` / `crt.sh` / `web.archive.org` 等源国内直连不稳,先 export 代理。**装之前 export,会被写进 systemd timer,定时任务也走代理**:
 
 ```bash
-# 可选:需要代理先 export
 export HTTPS_PROXY=http://127.0.0.1:7890
-
-bash install.sh
+export HTTP_PROXY=http://127.0.0.1:7890
+# 端口换成你本地代理实际端口(Clash/v2ray 等);确认能 curl 通 github.com 再继续
 ```
 
-install.sh 会:装 apt 依赖 → 拉代码到 `~/asm` → 下载预编译工具(subfinder/httpx/naabu/nuclei/katana/gau)到 `bin/` → 建 python venv → **交互输入两个 key** → 注册 systemd timer(按 `schedule.yaml`,默认每 6 小时)→ 创建 `asm` 命令。
-
-也可以用环境变量非交互提供 key:
+### 2. 一键安装
 
 ```bash
-ASM_LLM_KEY=sk-xxx ASM_PUSH_WEBHOOK=https://oapi.dingtalk.com/robot/send?access_token=xxx bash install.sh
+# 方式 A:克隆后跑(推荐,能 git pull 升级)
+git clone https://github.com/moumoonl/asm.git && cd asm
+bash install.sh
+
+# 方式 B:一行 curl 直跑(不保留 .git,后续手动升级)
+curl -fsSL https://raw.githubusercontent.com/moumoonl/asm/main/install.sh | bash
+```
+
+`install.sh` 做 6 件事:`apt` 依赖 → clone 到 `~/asm` → 下载预编译工具(subfinder/httpx/naabu/nuclei/katana/gau)到 `bin/` → 建 python venv → 填 key → 注册 systemd timer(按 `schedule.yaml`,默认每 6 小时)→ 创建 `asm` 命令。
+
+### 3. 填两个 key
+
+安装时**交互输入**(有终端时自动提示),或用环境变量**非交互**(适合自动化):
+
+```bash
+ASM_LLM_KEY=sk-xxx \
+ASM_PUSH_WEBHOOK=https://oapi.dingtalk.com/robot/send?access_token=xxx \
+bash install.sh
 ```
 
 | key | 必填 | 说明 |
 |---|---|---|
-| LLM API key | 建议填 | OpenAI 兼容三件套(base_url/model/api_key),默认 DeepSeek。**留空则走规则直通模式**,不调用 LLM,管道照常跑 |
-| 钉钉 webhook | 可选 | 留空则报告输出到 CLI stdout;钉钉加签 secret 可选 |
+| LLM API key | 建议填 | OpenAI 兼容三件套(`base_url`/`model`/`api_key`),默认 DeepSeek。**留空则走规则直通模式**,不调用 LLM,管道照常跑 |
+| 钉钉 webhook | 可选 | 留空则报告输出到 CLI stdout;钉钉加签 `secret` 可选 |
 
-macOS 本地跑(开发/测试):`brew install subfinder httpx naabu nuclei katana gau` + `python3 -m venv .venv && .venv/bin/pip install openai pydantic pyyaml tldextract`,然后 `.venv/bin/python -m asm ...`。
+**事后改 key / 换模型**:直接编辑 `~/asm/config.yaml`(模板在 `config.example.yaml`)。改完不用重装,下次 `asm run` 即生效。
+
+```yaml
+# config.yaml 里要改的两处
+llm:
+  base_url: https://api.deepseek.com
+  model: deepseek-v4-flash
+  api_key: "sk-你的key"        # ← LLM key
+
+push:
+  channel: dingtalk
+  webhook: "https://oapi.dingtalk.com/robot/send?access_token=xxx"  # ← 钉钉 webhook
+  secret: ""                   # 钉钉加签(可选)
+```
+
+### 4. 验证
+
+```bash
+asm targets add example.com        # 加目标(或编辑 ~/asm/targets.txt)
+asm run --dry                      # 首轮:建基线,写库不通知(强烈推荐)
+asm status                         # 看资产数 / 上次运行统计
+systemctl list-timers asm.timer    # 确认定时已注册
+```
+
+---
+
+**macOS 本地跑(开发/测试)**:`brew install subfinder httpx naabu nuclei katana gau` + `python3 -m venv .venv && .venv/bin/pip install openai pydantic pyyaml tldextract`,然后 `.venv/bin/python -m asm ...`。长任务建议 `caffeinate -i asm run` 防合盖休眠拖慢深扫。
 
 ## 快速开始
 

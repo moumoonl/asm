@@ -5,7 +5,7 @@
 set -euo pipefail
 
 INSTALL_DIR="${ASM_DIR:-$HOME/asm}"
-REPO_URL="${ASM_REPO:-https://github.com/<you>/asm}"   # TODO: 换成你的仓库
+REPO_URL="${ASM_REPO:-https://github.com/moumoonl/asm}"
 BIN_DIR="$INSTALL_DIR/bin"
 
 echo "==> [1/6] apt 依赖"
@@ -21,7 +21,7 @@ if [ ! -d "$INSTALL_DIR/asm" ]; then
   # 无 git 或 clone 失败时,假设当前目录就是代码目录,拷贝过去
   if [ ! -d "$INSTALL_DIR/asm" ]; then
     SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    cp -r "$SRC"/{asm,plugins,prompts,data,config.yaml,schedule.yaml,targets.txt} "$INSTALL_DIR/" 2>/dev/null || true
+    cp -r "$SRC"/{asm,plugins,prompts,data,config.example.yaml,schedule.yaml,targets.example.txt} "$INSTALL_DIR/" 2>/dev/null || true
   fi
 fi
 cd "$INSTALL_DIR"
@@ -57,7 +57,10 @@ python3 -m venv .venv
 chmod +x plugins/*/*.py 2>/dev/null || true
 
 echo "==> [5/6] 配置两个 key"
-if [ ! -s config.yaml ] || grep -q 'api_key: ""' config.yaml; then
+# 仓库里只有 *.example 模板(config.yaml/targets.txt 被 gitignore),首次部署从模板生成
+[ -f config.yaml ] || cp config.example.yaml config.yaml
+[ -f targets.txt ] || cp targets.example.txt targets.txt
+if grep -q 'api_key: ""' config.yaml; then
   LLM_KEY="${ASM_LLM_KEY:-}"
   PUSH_WH="${ASM_PUSH_WEBHOOK:-}"
   if [ -z "$LLM_KEY" ] && [ -t 0 ]; then read -rp "LLM API key: " LLM_KEY; fi
