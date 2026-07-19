@@ -1,0 +1,27 @@
+# --- 敏感数据/运行产物(绝不提交) ---
+config.yaml
+targets.txt
+state.db
+state.db.*
+*.db
+*.db.lock
+logs/
+
+# --- Python ---
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# --- 系统/编辑器 ---
+.DS_Store
+*.swp
+*.swo
+.idea/
+.vscode/
+
+# --- 工具缓存 ---
+.cache/
+*.log

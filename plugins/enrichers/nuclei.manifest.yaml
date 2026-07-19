@@ -1,0 +1,8 @@
+name: nuclei
+phase: enricher
+input: endpoint
+accepts: [endpoint]
+emits: [finding]
+order: 50
+timeout: 1800
+enabled: true

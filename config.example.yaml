@@ -1,0 +1,60 @@
+# 资产监控流水线配置示例(复制为 config.yaml 后填入自己的 key)
+# config.yaml 已被 .gitignore 忽略,不会上传
+llm:                            # key1,必填(留空则规则直通模式,不调用 LLM)
+  base_url: https://api.deepseek.com
+  model: deepseek-v4-flash
+  api_key: ""                   # <-- 填你的 DeepSeek API key
+  batch_size: 200
+  retry: 1
+
+push:                           # key2,可选;留空 -> 报告打 CLI stdout
+  channel: dingtalk             # dingtalk | none
+  webhook: ""                   # <-- 填钉钉机器人 webhook(可选)
+  secret: ""                    # 钉钉加签(可选)
+
+collectors:                     # 被动源,只对根域跑
+  crtsh:        {enabled: true}
+  gau:          {enabled: true}
+  subfinder:    {enabled: true}
+
+enrichers:                      # 主动源,仅 http/https
+  httpx:    {enabled: true,  rate: 50, timeout: 10}
+  naabu:    {enabled: true,  ports: "top-1000", only_user_input: true,
+             skip_waf_edge: true}
+  js_secrets: {enabled: true, max_js: 60, no_derive: true}
+  nuclei:   {enabled: true,  args: "-as", tags: "exposure,misconfig,cve,detect",
+             severity: "medium,high,critical", rate: 30, http_only: true}
+  ffuf_dirs: {enabled: false, wordlist: ""}
+
+notifiers:
+  dingtalk: {enabled: true}
+  stdout:   {enabled: true}
+
+routing:
+  naabu_on_user_input_only: true
+  auto_expand_root: true
+  scope_roots: []
+  scope_skip_shared_suffix: true
+  public_suffix_list: true
+
+waf:
+  detect: true
+  collapse_identical_responses: true
+  resp_body_bytes: 8192
+  normalize_body: true
+  deep_scan_representative_only: true
+
+revalidate:
+  every_rounds: 4
+  change_sig: "status+title+tech"
+  confirmation_retries: 2
+  cooldown_rounds: 2
+  naabu_rescan_user_hosts: true
+
+state:
+  path: state.db
+  retention_days: 90
+
+limits:
+  collector_timeout: 300
+  max_assets_per_run: 5000

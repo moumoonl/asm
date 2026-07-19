@@ -1,0 +1,8 @@
+name: httpx
+phase: enricher
+input: endpoint
+accepts: [endpoint, ip:port, domain:port, url]
+emits: [asset]
+order: 20
+timeout: 900
+enabled: true

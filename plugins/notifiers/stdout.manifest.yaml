@@ -1,0 +1,8 @@
+name: stdout
+phase: notifier
+input: report
+accepts: []
+emits: []
+order: 20
+timeout: 30
+enabled: true

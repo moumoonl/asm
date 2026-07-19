@@ -1,0 +1,26 @@
+# 共享托管/多租户后缀:提取出的根命中就不扩展(只测输入资产本身)
+suffixes:
+  # 国际
+  - github.io
+  - gitlab.io
+  - herokuapp.com
+  - vercel.app
+  - netlify.app
+  - pages.dev
+  - fly.dev
+  - render.com
+  - firebaseapp.com
+  - azurewebsites.net
+  - cloudapp.net
+  - s3.amazonaws.com
+  - cloudfront.net
+  - fastly.net
+  # 国内
+  - gitee.io
+  - aliyuncs.com
+  - myqcloud.com
+  - qcloudcs.com
+  - clouddn.com
+  - bce.baidu.com
+  - obs.myhuaweicloud.com
+  - cdn.dnsv1.com

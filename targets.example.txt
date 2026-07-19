@@ -1,0 +1,9 @@
+# 目标示例(复制为 targets.txt 后填入自己的目标)
+# 一行一个;支持 ip / ip:port / 域名 / 域名:port / url
+# 示例(均为占位,非真实目标):
+203.0.113.10
+198.51.100.20:8080
+example.com
+demo.example.com:8443
+http://192.0.2.5/api
+https://demo.example.org/v1

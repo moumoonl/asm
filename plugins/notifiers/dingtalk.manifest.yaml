@@ -1,0 +1,8 @@
+name: dingtalk
+phase: notifier
+input: report
+accepts: []
+emits: []
+order: 10
+timeout: 60
+enabled: true

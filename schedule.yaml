@@ -1,0 +1,2 @@
+# 定时(安装时被 install.sh 转成 systemd timer;手动跑: asm run)
+run: "0 */6 * * *"

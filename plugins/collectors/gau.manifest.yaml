@@ -1,0 +1,8 @@
+name: gau
+phase: collector
+input: root
+accepts: [domain]
+emits: [asset]
+order: 20
+timeout: 300
+enabled: true

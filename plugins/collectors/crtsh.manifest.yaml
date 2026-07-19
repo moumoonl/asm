@@ -1,0 +1,8 @@
+name: crtsh
+phase: collector
+input: root
+accepts: [domain]
+emits: [asset]
+order: 10
+timeout: 120
+enabled: true

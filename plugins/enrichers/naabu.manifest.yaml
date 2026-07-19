@@ -1,0 +1,8 @@
+name: naabu
+phase: enricher
+input: seed
+accepts: [ip, domain]
+emits: [asset]
+order: 10
+timeout: 2700
+enabled: true
