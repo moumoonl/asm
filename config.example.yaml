@@ -23,7 +23,7 @@ enrichers:                      # 主动源,仅 http/https
              skip_waf_edge: true, host_timeout: 600}
   js_secrets: {enabled: true, max_js: 60, no_derive: true}
   nuclei:   {enabled: true,  args: "-as", tags: "exposure,misconfig,cve,detect",
-             severity: "medium,high,critical", rate: 30, http_only: true}
+             severity: "medium,high,critical", rate: 30, http_only: true, scan_timeout: 3600}
   ffuf_dirs: {enabled: false, wordlist: ""}
 
 notifiers:

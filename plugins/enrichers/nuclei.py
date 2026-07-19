@@ -12,6 +12,7 @@ ARGS = str(CFG.get("args", "-as"))
 TAGS = str(CFG.get("tags", "exposure,misconfig,cve,detect"))
 SEVERITY = str(CFG.get("severity", "medium,high,critical"))
 RATE = str(CFG.get("rate", 30))
+SCAN_TIMEOUT = int(CFG.get("scan_timeout", 3600))   # 0=不限,等 nuclei 跑完(manifest 外层兜底)
 
 
 def find_bin(name: str) -> str:
@@ -36,11 +37,12 @@ def main() -> int:
         "-tags", TAGS, "-severity", SEVERITY, "-rate-limit", RATE,
         "-pt", "http", "-timeout", "10", "-jsonl", "-silent", "-no-color",
         "-stats", "-duc"]
+    sub_to = SCAN_TIMEOUT if SCAN_TIMEOUT > 0 else None   # 0=不限,等 nuclei 跑完(manifest 外层兜底)
     try:
-        p = subprocess.run(cmd, capture_output=True, text=True, timeout=1800)
+        p = subprocess.run(cmd, capture_output=True, text=True, timeout=sub_to)
     except subprocess.TimeoutExpired as e:
         # 超时:回收已流出的 JSONL 继续解析,并告知框架(不静默)
-        print(f"[nuclei] 扫描超时(1800s),回收部分输出", file=sys.stderr)
+        print(f"[nuclei] 扫描超时({SCAN_TIMEOUT}s),回收部分输出", file=sys.stderr)
         out_lines = (e.stdout or "").splitlines() if isinstance(e.stdout, str) else []
         _emit(out_lines, assets)
         return 1

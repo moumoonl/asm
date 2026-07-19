@@ -182,6 +182,7 @@ asm reload                      # 改 schedule.yaml 后的 timer 重载说明
 | `enrichers.httpx.rate/timeout` | 50 / 10s | 探活+富化一体 |
 | `enrichers.js_secrets.max_js` | 60 | 每端点抓 JS 上限 |
 | `enrichers.nuclei` | `-as`, medium+ | 仅 http 模板,只跑折叠组代表 |
+| `enrichers.nuclei.scan_timeout` | 3600 | 全量扫描上限(秒);**0=不限等跑完**;超时回收已扫 finding,不静默丢 |
 | `enrichers.ffuf_dirs` | **关** | 预留,字典自定后开 |
 | `routing.scope_roots` | 空 | 范围白名单:只扩展这些根域 |
 | `waf.deep_scan_representative_only` | true | 折叠组只深扫代表(省量防抖) |

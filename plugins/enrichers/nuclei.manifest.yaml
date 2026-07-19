@@ -4,5 +4,5 @@ input: endpoint
 accepts: [endpoint]
 emits: [finding]
 order: 50
-timeout: 1800
+timeout: 7200
 enabled: true
