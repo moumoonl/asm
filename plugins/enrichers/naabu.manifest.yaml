@@ -4,5 +4,5 @@ input: seed
 accepts: [ip, domain]
 emits: [asset]
 order: 10
-timeout: 2700
+timeout: 5400
 enabled: true

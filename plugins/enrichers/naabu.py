@@ -82,23 +82,26 @@ def main() -> int:
         return 0
     top = PORTS.replace("top-", "") if PORTS.startswith("top-") else "1000"
     seed_map = {s["value"]: s for s in seeds}
-    # 分块扫:单块超时只丢本块,已产出块不受影响(框架还会回收部分输出)
-    CHUNK, CHUNK_TIMEOUT = 6, 360
-    for i in range(0, len(hosts), CHUNK):
-        chunk = hosts[i:i + CHUNK]
-        cmd = [find_bin("naabu"), "-host", ",".join(chunk), "-top-ports", top,
-               "-s", "c", "-silent", "-timeout", "2000", "-rate", "1000",
-               "-retries", "1"]
+    # 单主机逐个扫:每台独享超时预算,一台慢/卡只丢自己,不影响其它台。
+    # host_timeout 是 hang 兜底(正常 top-1000 远不到此上限);0=不限,等 naabu 自己跑完。
+    HOST_TIMEOUT = int(CFG.get("host_timeout", 600))
+    RATE = str(CFG.get("rate", 1000))
+    PROBE_TO = str(int(CFG.get("probe_timeout_ms", 2000)))
+    RETRIES = str(int(CFG.get("retries", 1)))
+    sub_to = HOST_TIMEOUT if HOST_TIMEOUT > 0 else None
+    for host in hosts:
+        cmd = [find_bin("naabu"), "-host", host, "-top-ports", top,
+               "-s", "c", "-silent", "-timeout", PROBE_TO, "-rate", RATE,
+               "-retries", RETRIES]
         try:
-            p = subprocess.run(cmd, capture_output=True, text=True,
-                               timeout=CHUNK_TIMEOUT)
+            p = subprocess.run(cmd, capture_output=True, text=True, timeout=sub_to)
             if p.returncode != 0 and not p.stdout:
-                print(f"[naabu] 块退出码 {p.returncode}: {p.stderr[-200:]}",
+                print(f"[naabu] {host} 退出码 {p.returncode}: {p.stderr[-200:]}",
                       file=sys.stderr)
             out_text = p.stdout
         except subprocess.TimeoutExpired as e:
-            print(f"[naabu] 块超时({CHUNK_TIMEOUT}s,{len(chunk)} 主机),"
-                  f"保留已扫出结果", file=sys.stderr)
+            print(f"[naabu] {host} 超时({HOST_TIMEOUT}s,疑卡死),保留已扫出结果",
+                  file=sys.stderr)
             out_text = e.stdout or ""
             if isinstance(out_text, bytes):
                 out_text = out_text.decode("utf-8", errors="replace")
