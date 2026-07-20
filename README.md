@@ -62,7 +62,7 @@ targets.txt / asm run -t <目标>
 
 ### 1. 准备代理(国内必填,海外可跳过)
 
-`github.com` / `api.github.com` / `crt.sh` / `web.archive.org` 等源国内直连不稳,先 export 代理。**装之前 export,会被写进 systemd timer,定时任务也走代理**:
+`github.com` / `api.github.com` / `crt.sh` / `web.archive.org` 等源国内直连不稳,先 export 代理。**装之前 export,会被写进 systemd timer,定时任务也走代理**:推荐项目https://github.com/nelvko/clash-for-linux-install
 
 ```bash
 export HTTPS_PROXY=http://127.0.0.1:7890
